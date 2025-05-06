@@ -1,0 +1,144 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Livre Généalogique CMF</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      overflow-x: auto;
+      background-color: #f8f8f8;
+    }
+    .tree {
+      display: flex;
+      justify-content: start;
+      align-items: flex-start;
+      gap: 40px;
+      flex-wrap: nowrap;
+    }
+    .generation {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      min-width: 240px;
+    }
+    .node {
+      padding: 10px;
+      border: 2px solid #999;
+      border-radius: 10px;
+      background-color: #eee;
+      font-size: 14px;
+      word-wrap: break-word;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    }
+    .male {
+      background-color: #cce5ff;
+    }
+    .female {
+      background-color: #fdd0e5;
+    }
+    .unknown {
+      background-color: #e0e0e0;
+    }
+    h1 {
+      color: #333;
+    }
+    #animalId {
+      margin-right: 10px;
+      padding: 5px;
+      font-size: 14px;
+    }
+    button {
+      padding: 6px 12px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Livre Généalogique des Chèvres Miniatures</h1>
+
+  <label for="animalId">ID ou nom de l'animal :</label>
+  <input type="text" id="animalId" placeholder="ex: A001 ou Biscotte">
+  <button onclick="generateTree()">Afficher l'arbre</button>
+
+  <div id="tree" class="tree"></div>
+
+  <script>
+    const SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/13mSpsu47w0D7p-7MC_ocxti30BvthGN1OMWZYZOnckg/export?format=csv';
+
+    async function loadData() {
+      const response = await fetch(SPREADSHEET_URL);
+      const text = await response.text();
+      const lines = text.trim().split('\n');
+      const headers = lines[0].split(',');
+      return lines.slice(1).map(line => {
+        const values = line.split(',');
+        const entry = {};
+        headers.forEach((h, i) => entry[h.trim()] = values[i]?.trim());
+        return entry;
+      });
+    }
+
+    function getParent(data, ref) {
+      if (!ref) return null;
+      return data.find(a => a['ID'] === ref || (!a['ID'] && a['Nom'] === ref));
+    }
+
+    function buildGenerations(animal, data, generations = 10) {
+      const tree = Array.from({ length: generations }, () => []);
+      const seen = new Set();
+
+      function recurse(a, gen) {
+        if (!a || gen >= generations) return;
+        const key = a.ID || a.Nom;
+        if (seen.has(key)) return;
+        seen.add(key);
+        tree[gen].push(a);
+        recurse(getParent(data, a['Père']), gen + 1);
+        recurse(getParent(data, a['Mère']), gen + 1);
+      }
+
+      recurse(animal, 0);
+      return tree;
+    }
+
+    function createNodeElement(a) {
+      const div = document.createElement('div');
+      div.className = 'node';
+      const sexe = a['Sexe']?.toLowerCase();
+      if (sexe.includes('mâle') && !sexe.includes('castré')) div.classList.add('male');
+      else if (sexe.includes('femelle')) div.classList.add('female');
+      else div.classList.add('unknown');
+      div.innerHTML = `<strong>${a.Nom || '(sans nom)'}</strong><br>
+        ${a.Sexe || ''}<br>
+        ${a.Robe || ''}<br>
+        ${a.Taille || ''}<br>
+        ${a['Couleur des yeux'] || ''}`;
+      return div;
+    }
+
+    async function generateTree() {
+      const id = document.getElementById('animalId').value.trim();
+      const data = await loadData();
+      const animal = data.find(a => a.ID === id || a.Nom === id);
+      const container = document.getElementById('tree');
+      container.innerHTML = '';
+      if (!animal) {
+        container.innerText = 'Animal non trouvé';
+        return;
+      }
+      const generations = buildGenerations(animal, data);
+      generations.forEach(col => {
+        const genDiv = document.createElement('div');
+        genDiv.className = 'generation';
+        col.forEach(a => genDiv.appendChild(createNodeElement(a)));
+        container.appendChild(genDiv);
+      });
+    }
+  </script>
+</body>
+</html>
